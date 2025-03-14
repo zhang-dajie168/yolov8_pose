@@ -1,5 +1,6 @@
 # yolov8_pose
-c++ in rk3588
+
+
 
 ## 1. Description
 
@@ -84,7 +85,7 @@ cmake ..
 make
 
 
-#### 7. Run demo
+#### 7.3 Run demo
 
 cd build 
 ./yolov8_video_pose ../model/yolov8_pose.rknn ../model/bus.jpg
