@@ -84,7 +84,7 @@ cmake ..
 make
 
 
-#### 7.3 Run demo
+#### 7. Run demo
 
 cd build 
 ./yolov8_video_pose ../model/yolov8_pose.rknn ../model/bus.jpg
