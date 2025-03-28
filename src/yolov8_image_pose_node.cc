@@ -204,7 +204,7 @@ private:
         }
 
     }
-    
+
     // rknn_app_context_t rknn_app_ctx;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr image_pub_;
@@ -219,59 +219,60 @@ private:
     std::deque<bool> hands_on_hips_history_;
 
 };
-        // 叉腰动作检测实现
-    bool YoloPoseNode::isHandsOnHips(object_detect_result& det_result) {
-        // 关键点索引定义（根据COCO规范）
-        const int LEFT_WRIST = 9;
-        const int RIGHT_WRIST = 10;
-        const int LEFT_HIP = 11;
-        const int RIGHT_HIP = 12;
 
-        // 获取坐标（假设关键点格式为[x, y, confidence]）
-        cv::Point left_wrist(det_result.keypoints[LEFT_WRIST][0], det_result.keypoints[LEFT_WRIST][1]);
-        cv::Point right_wrist(det_result.keypoints[RIGHT_WRIST][0], det_result.keypoints[RIGHT_WRIST][1]);
-        cv::Point left_hip(det_result.keypoints[LEFT_HIP][0], det_result.keypoints[LEFT_HIP][1]);
-        cv::Point right_hip(det_result.keypoints[RIGHT_HIP][0], det_result.keypoints[RIGHT_HIP][1]);
+// 叉腰动作检测实现
+bool YoloPoseNode::isHandsOnHips(object_detect_result& det_result) {
+    // 关键点索引定义（根据COCO规范）
+    const int LEFT_WRIST = 9;
+    const int RIGHT_WRIST = 10;
+    const int LEFT_HIP = 11;
+    const int RIGHT_HIP = 12;
 
-        // 置信度过滤
-        if (det_result.keypoints[LEFT_WRIST][2] < 0.3 || 
-            det_result.keypoints[RIGHT_WRIST][2] < 0.3) {
-            return false;
-        }
+    // 获取坐标（假设关键点格式为[x, y, confidence]）
+    cv::Point left_wrist(det_result.keypoints[LEFT_WRIST][0], det_result.keypoints[LEFT_WRIST][1]);
+    cv::Point right_wrist(det_result.keypoints[RIGHT_WRIST][0], det_result.keypoints[RIGHT_WRIST][1]);
+    cv::Point left_hip(det_result.keypoints[LEFT_HIP][0], det_result.keypoints[LEFT_HIP][1]);
+    cv::Point right_hip(det_result.keypoints[RIGHT_HIP][0], det_result.keypoints[RIGHT_HIP][1]);
 
-        // 判断逻辑
-        bool left_hand_on_hip = 
-            (abs(left_wrist.y - left_hip.y) < 25 && 
-            (left_wrist.x > left_hip.x));
-        bool right_hand_on_hip = 
-            (abs(right_wrist.y - right_hip.y) < 25 && 
-            (right_wrist.x < right_hip.x));
+    // 置信度过滤
+    if (det_result.keypoints[LEFT_WRIST][2] < 0.3 || 
+        det_result.keypoints[RIGHT_WRIST][2] < 0.3) {
+        return false;
+    }
 
-        return left_hand_on_hip && right_hand_on_hip;
-        }
+    // 判断逻辑
+    bool left_hand_on_hip = 
+        (abs(left_wrist.y - left_hip.y) < 25 && 
+        (left_wrist.x > left_hip.x));
+    bool right_hand_on_hip = 
+        (abs(right_wrist.y - right_hip.y) < 25 && 
+        (right_wrist.x < right_hip.x));
 
-        // 举双手动作检测实现
-    bool YoloPoseNode::isHandsUp(object_detect_result& det_result) {
-        const int LEFT_WRIST = 9;
-        const int RIGHT_WRIST = 10;
-        const int LEFT_SHOULDER = 5;
-        const int RIGHT_SHOULDER = 6;
+    return left_hand_on_hip && right_hand_on_hip;
+    }
 
-        cv::Point left_wrist(det_result.keypoints[LEFT_WRIST][0], det_result.keypoints[LEFT_WRIST][1]);
-        cv::Point right_wrist(det_result.keypoints[RIGHT_WRIST][0], det_result.keypoints[RIGHT_WRIST][1]);
-        cv::Point left_shoulder(det_result.keypoints[LEFT_SHOULDER][0], det_result.keypoints[LEFT_SHOULDER][1]);
-        cv::Point right_shoulder(det_result.keypoints[RIGHT_SHOULDER][0], det_result.keypoints[RIGHT_SHOULDER][1]);
+    // 举双手动作检测实现
+bool YoloPoseNode::isHandsUp(object_detect_result& det_result) {
+    const int LEFT_WRIST = 9;
+    const int RIGHT_WRIST = 10;
+    const int LEFT_SHOULDER = 5;
+    const int RIGHT_SHOULDER = 6;
 
-        if (det_result.keypoints[LEFT_WRIST][2] < 0.3 || 
-            det_result.keypoints[RIGHT_WRIST][2] < 0.3) {
-            return false;
-        }
+    cv::Point left_wrist(det_result.keypoints[LEFT_WRIST][0], det_result.keypoints[LEFT_WRIST][1]);
+    cv::Point right_wrist(det_result.keypoints[RIGHT_WRIST][0], det_result.keypoints[RIGHT_WRIST][1]);
+    cv::Point left_shoulder(det_result.keypoints[LEFT_SHOULDER][0], det_result.keypoints[LEFT_SHOULDER][1]);
+    cv::Point right_shoulder(det_result.keypoints[RIGHT_SHOULDER][0], det_result.keypoints[RIGHT_SHOULDER][1]);
 
-        bool left_hand_up = (left_shoulder.y - left_wrist.y) > 50;
-        bool right_hand_up = (right_shoulder.y - right_wrist.y) > 50;
+    if (det_result.keypoints[LEFT_WRIST][2] < 0.3 || 
+        det_result.keypoints[RIGHT_WRIST][2] < 0.3) {
+        return false;
+    }
 
-        return left_hand_up && right_hand_up;
-        }
+    bool left_hand_up = (left_shoulder.y - left_wrist.y) > 50;
+    bool right_hand_up = (right_shoulder.y - right_wrist.y) > 50;
+
+    return left_hand_up && right_hand_up;
+    }
 
 
 int main(int argc, char** argv) {
