@@ -2,6 +2,8 @@
 #define _RKNN_MODEL_ZOO_IMAGE_UTILS_H_
 
 #ifdef __cplusplus
+#include <opencv2/opencv.hpp>
+
 extern "C" {
 #endif
 
@@ -16,6 +18,7 @@ typedef struct {
     int y_pad;
     float scale;
 } letterbox_t;
+
 
 /**
  * @brief Read image file (support png/jpeg/bmp)
@@ -66,8 +69,13 @@ int convert_image_with_letterbox(image_buffer_t* src_image, image_buffer_t* dst_
  */
 int get_image_size(image_buffer_t* image);
 
+
+
+int read_frame_jpeg(unsigned char* frameData, unsigned long frameSize, image_buffer_t* image);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
+//int read_frame_to_imagebuffer(const cv::Mat& frame, image_buffer_t* image) ;
 #endif // _RKNN_MODEL_ZOO_IMAGE_UTILS_H_

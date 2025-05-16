@@ -1,19 +1,19 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(rknn_yolov8_pose_demo)
+project(yolov8_pose)
 
-if (ENABLE_ASAN)
-	message(STATUS "BUILD WITH ADDRESS SANITIZER")
-	set (CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
-	set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
-	set (CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fno-omit-frame-pointer -fsanitize=address")
-endif ()
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(rknpu_yolov8-pose_file src/utils/yolov8-pose.cc)
 
 #  设置库架构
 set(LIB_ARCH "aarch64")
 set(DEVICE_NAME "RK3588")
+
+# 寻找Eigen3
+set(EIGEN_VERSION 3.3)
+find_package(Eigen3 ${EIGEN_VERSION} QUIET)
+
 
 #  rknn_api 文件夹路径
 set(RKNN_API_PATH ${CMAKE_CURRENT_SOURCE_DIR}/librknn_api)
@@ -21,23 +21,28 @@ set(RKNN_API_PATH ${CMAKE_CURRENT_SOURCE_DIR}/librknn_api)
 set(RKNN_API_INCLUDE_PATH ${RKNN_API_PATH}/include)
 #  rknn_api lib 路径
 set(RKNN_API_LIB_PATH ${RKNN_API_PATH}/${LIB_ARCH}/librknnrt.so)
-#  yolo_api include 路径
-#set(YOLO_API_INCLUDE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/include)
-# util_lib
-#set(YOLO_API_LIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 
 # 寻找OpenCV库，使用自定义的OpenCV_DIR
 find_package(OpenCV REQUIRED)
+
 # 输出OpenCV信息
 message(STATUS "include path: ${OpenCV_INCLUDE_DIRS}")
 message(STATUS "${OpenCV_VERSION}")
 
+# 查找依赖
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(vision_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(CURL REQUIRED)
+
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 link_directories( ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 
-# 寻找Eigen3
-#set(EIGEN_VERSION 3.3)
-#find_package(Eigen3 ${EIGEN_VERSION} QUIET)
 
 # 用来搜索头文件的目录
 include_directories(
@@ -47,23 +52,66 @@ include_directories(
     ${YOLO_API_INCLUDE_PATH}
 )
 
+# bytetrack_lib
+add_library(bytetrack_lib SHARED
+  src/bytetrack/BYTETracker.cpp
+  src/bytetrack/kalmanFilter.cpp
+  src/bytetrack/lapjv.cpp
+  src/bytetrack/STrack.cpp
+  src/bytetrack/utils.cpp
+  )
 
+target_link_libraries(bytetrack_lib Eigen3::Eigen)
+
+#target_link_libraries(bytetrack_lib Eigen3::Eigen)
 
 # 测试yolov8_video_track
-add_executable(yolov8_video_pose 
-src/yolov8_video_pose.cc
+add_executable(yolov8_track_pose
+src/yolov8_track_pose.cc
 src/utils/yolov8-pose.cc
 src/utils/file_utils.c
 src/utils/image_drawing.c
 src/utils/image_utils.c
 src/utils/postprocess.cc
-
+src/utils/encode_frame.cc
 )
 
-
-target_link_libraries(yolov8_video_pose PRIVATE
+ament_target_dependencies(yolov8_track_pose
+   rclcpp
+   sensor_msgs
+   cv_bridge
+   vision_msgs
+   image_transport
+   geometry_msgs
+)
+target_link_libraries(yolov8_track_pose 
  m
   rknnrt
   turbojpeg
   rga
+  bytetrack_lib
+  ${CURL_LIBRARIES}
+  ${OpenCV_LIBS}
   )
+
+#install(DIRECTORY include/
+#  DESTINATION include
+#)
+
+install(TARGETS yolov8_track_pose
+  DESTINATION lib/${PROJECT_NAME})
+ 
+install(DIRECTORY include lib
+  DESTINATION share/${PROJECT_NAME}
+)
+
+  install(DIRECTORY launch
+      DESTINATION share/${PROJECT_NAME}/launch
+ )
+ 
+ install(DIRECTORY model/
+  DESTINATION share/${PROJECT_NAME}/model
+)
+ 
+ 
+ament_package()

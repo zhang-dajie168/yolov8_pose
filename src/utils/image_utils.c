@@ -21,6 +21,8 @@
 #include "image_utils.h"
 #include "file_utils.h"
 
+//#include <opencv2/opencv.hpp>
+
 static const char* filter_image_names[] = {
     "jpg",
     "jpeg",
@@ -153,8 +155,8 @@ static int read_image_raw(const char* path, image_buffer_t* image)
         printf("fopen %s fail!\n", path);
         return -1;
     }
-    fseek(fp, 0, SEEK_END);
-    int file_size = ftell(fp);
+    fseek(fp, 0, SEEK_END);// 将文件指针移动到文件末尾
+    int file_size = ftell(fp);//获取文件的总字节数
     unsigned char *data = image->virt_addr;
     if (image->virt_addr == NULL) {
         data = (unsigned char *)malloc(file_size+1);
@@ -242,11 +244,12 @@ static int read_image_stb(const char* path, image_buffer_t* image)
 
 int read_image(const char* path, image_buffer_t* image)
 {
-    const char* _ext = strrchr(path, '.');
+    const char* _ext = strrchr(path, '.'); //在字符串path中查找最后一个点（.）字符的位置，并返回该字符的地址。如果找到，函数返回指向该字符的指针；如果没有找到，则返回NULL。
     if (!_ext) {
         // missing extension
         return -1;
     }
+    //strcmp 比较两个字符是否相等，相等返回0，
     if (strcmp(_ext, ".data") == 0) {
         return read_image_raw(path, image);
     } else if (strcmp(_ext, ".jpg") == 0 || strcmp(_ext, ".jpeg") == 0 || strcmp(_ext, ".JPG") == 0 ||
@@ -680,7 +683,7 @@ int convert_image(image_buffer_t* src_img, image_buffer_t* dst_img, image_rect_t
             printf("try convert image use cpu\n");
             ret = convert_image_cpu(src_img, dst_img, src_box, dst_box, color);
         }
-    } else {
+    }else {
         printf("src width is not 4/16-aligned, convert image use cpu\n");
         ret = convert_image_cpu(src_img, dst_img, src_box, dst_box, color);
     }
@@ -782,3 +785,120 @@ int convert_image_with_letterbox(image_buffer_t* src_image, image_buffer_t* dst_
     ret = convert_image(src_image, dst_image, &src_box, &dst_box, color);
     return ret;
 }
+
+
+int read_frame_jpeg(unsigned char* frameData, unsigned long frameSize, image_buffer_t* image)
+{
+    unsigned long jpegSize = frameSize;
+    unsigned char* jpegBuf = frameData;  
+
+    // 初始化解码器
+    tjhandle handle = NULL;
+    int subsample, colorspace;
+    int ret = 0;
+    int width, height;
+    int origin_width, origin_height;
+
+    handle = tjInitDecompress();
+    // 获取JPEG的头部信息
+    ret = tjDecompressHeader3(handle, jpegBuf, jpegSize, &origin_width, &origin_height, &subsample, &colorspace);
+    if (ret < 0) {
+        printf("header file error, errorStr:%s, errorCode:%d\n", tjGetErrorStr(), tjGetErrorCode(handle));
+        return -1;
+    }
+
+    // 对图像做裁剪16对齐，利于后续rga操作
+    int crop_width = origin_width / 16 * 16;
+    int crop_height = origin_height / 16 * 16;
+
+    printf("origin size=%dx%d crop size=%dx%d\n", origin_width, origin_height, crop_width, crop_height);
+
+    // 获取JPEG的详细解码信息
+    ret = tjDecompressHeader3(handle, jpegBuf, jpegSize, &width, &height, &subsample, &colorspace);
+    if (ret < 0) {
+        printf("header file error, errorStr:%s, errorCode:%d\n", tjGetErrorStr(), tjGetErrorCode(handle));
+        return -1;
+    }
+    printf("input image: %d x %d, subsampling: %s, colorspace: %s\n", 
+            width, height, subsampName[subsample], colorspaceName[colorspace]);
+
+    int sw_out_size = width * height * 3;
+    unsigned char* sw_out_buf = image->virt_addr;
+    if (sw_out_buf == NULL) {
+        sw_out_buf = (unsigned char*)malloc(sw_out_size * sizeof(unsigned char));
+    }
+    if (sw_out_buf == NULL) {
+        printf("sw_out_buf is NULL\n");
+        goto out;
+    }
+
+    // 解压JPEG图像
+    ret = tjDecompress2(handle, jpegBuf, jpegSize, sw_out_buf, width, 0, height, TJPF_RGB, 0);
+    if ((0 != tjGetErrorCode(handle)) && (ret < 0)) {
+        printf("error : decompress failed, errorStr:%s, errorCode:%d\n", tjGetErrorStr(), tjGetErrorCode(handle));
+        goto out;
+    }
+    if ((0 == tjGetErrorCode(handle)) && (ret < 0)) {
+        printf("warning : errorStr:%s, errorCode:%d\n", tjGetErrorStr(), tjGetErrorCode(handle));
+    }
+
+    tjDestroy(handle);
+
+    image->width = width;
+    image->height = height;
+    image->format = IMAGE_FORMAT_RGB888;
+    image->virt_addr = sw_out_buf;
+    image->size = sw_out_size;
+
+out:
+    return 0;
+}
+
+
+
+
+// // 读取视频帧到 image_buffer_t
+// int read_frame_to_imagebuffer(const cv::Mat& frame, image_buffer_t* image) {
+//     if (frame.empty()) {
+//         printf("Error: 视频帧为空！\n");
+//         return -1;
+//     }
+
+//     // 转换颜色格式（OpenCV默认BGR，需根据需求调整）
+//     cv::Mat converted_frame;
+//     int target_channels = 3; // 目标通道数（根据 image->format 设置）
+//     switch (image->format) {
+//         case IMAGE_FORMAT_RGB888:
+//             cv::cvtColor(frame, converted_frame, cv::COLOR_BGR2RGB);
+//             target_channels = 3;
+//             break;
+//         case IMAGE_FORMAT_RGBA8888:
+//             cv::cvtColor(frame, converted_frame, cv::COLOR_BGR2RGBA);
+//             target_channels = 4;
+//             break;
+//         case IMAGE_FORMAT_GRAY8:
+//             cv::cvtColor(frame, converted_frame, cv::COLOR_BGR2GRAY);
+//             target_channels = 1;
+//             break;
+//         default:
+//             printf("Error: 不支持的图像格式！\n");
+//             return -1;
+//     }
+
+//     // 确保内存足够
+//     int size = converted_frame.cols * converted_frame.rows * target_channels;
+//     if (image->virt_addr == NULL) {
+//         image->virt_addr = (unsigned char*)malloc(size);
+//         if (!image->virt_addr) {
+//             printf("Error: 内存分配失败！\n");
+//             return -1;
+//         }
+//     }
+
+//     // 拷贝数据到 image_buffer_t
+//     memcpy(image->virt_addr, converted_frame.data, size);
+//     image->width = converted_frame.cols;
+//     image->height = converted_frame.rows;
+
+//     return 0;
+// }
