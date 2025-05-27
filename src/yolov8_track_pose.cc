@@ -134,54 +134,63 @@ private:
 
             // 更新跟踪器
             auto tracks = tracker_->update(trackobj);
-            
-            for (const auto &track : tracks) {
+
+            for (const auto &track : tracks)
+            {
                 int track_id = track.track_id;
-                
+
                 // 获取检测结果
                 auto det_result = find_detection_by_bbox(track.tlbr, od_results);
-                if (!det_result) continue;
-                
+                if (!det_result)
+                    continue;
+
                 // 初始化或更新跟踪对象
-                if (tracked_persons_.find(track_id) == tracked_persons_.end()) {
+                if (tracked_persons_.find(track_id) == tracked_persons_.end())
+                {
                     tracked_persons_[track_id] = {track_id, false, cv::Mat(), {}, this->now(), rclcpp::Time()};
                 }
-                auto& person = tracked_persons_[track_id];
-                
+                auto &person = tracked_persons_[track_id];
+
                 // 更新举手历史
                 bool hands_up = isHandsUp(*det_result);
                 person.hands_up_history.push_back(hands_up);
-                if (person.hands_up_history.size() > 60) person.hands_up_history.pop_front();
-                
+                if (person.hands_up_history.size() > 60)
+                    person.hands_up_history.pop_front();
+
                 // 判断持续举手条件（2秒内60次true）
-                bool is_hands_up_long = std::count(person.hands_up_history.begin(), 
-                                                  person.hands_up_history.end(), true) >= 60;
-                
+                bool is_hands_up_long = std::count(person.hands_up_history.begin(),
+                                                   person.hands_up_history.end(), true) >= 60;
+
                 // 状态机逻辑
-                if (!person.is_tracking) {
+                if (!person.is_tracking)
+                {
                     // 检查冷却时间
-                    bool in_cooldown = (person.hands_up_stop_time.seconds() != 0.0) && 
-                                      ((this->now() - person.hands_up_stop_time).seconds() < 10.0);
-                    
-                    if (!in_cooldown && is_hands_up_long) {
+                    bool in_cooldown = (person.hands_up_stop_time.seconds() != 0.0) &&
+                                       ((this->now() - person.hands_up_stop_time).seconds() < 10.0);
+
+                    if (!in_cooldown && is_hands_up_long)
+                    {
                         person.is_tracking = true;
                         person.hands_up_start_time = this->now();
                         // 保存特征
-                        cv::Rect roi(track.tlbr[0], track.tlbr[1], 
-                                    track.tlbr[2] - track.tlbr[0], track.tlbr[3] - track.tlbr[1]);
+                        cv::Rect roi(track.tlbr[0], track.tlbr[1],
+                                     track.tlbr[2] - track.tlbr[0], track.tlbr[3] - track.tlbr[1]);
                         person.feature = extract_feature(frame(roi));
                     }
-                } else {
+                }
+                else
+                {
                     // 检查跟踪超时（5秒）和持续举手条件
                     bool tracking_timeout = (this->now() - person.hands_up_start_time).seconds() >= 5.0;
-                    
-                    if (tracking_timeout && is_hands_up_long) {
+
+                    if (tracking_timeout && is_hands_up_long)
+                    {
                         person.is_tracking = false;
                         person.hands_up_stop_time = this->now();
                     }
                 }
             }
-            
+
             // 过滤只绘制激活目标
             std::vector<STrack> filtered_tracks;
             for (const auto &track : tracks)
@@ -304,9 +313,6 @@ private:
 
     void publish_decobj_to_trackobj(object_detect_result_list &results, std::vector<Object> &trackobj)
     {
-        geometry_msgs::msg::PolygonStamped polygon_msg;
-        polygon_msg.header.stamp = this->get_clock()->now();
-        polygon_msg.header.frame_id = "camera_link";
 
         if (results.count > 0)
         {
@@ -327,8 +333,6 @@ private:
 
             trackobj.push_back(obj);
         }
-
-        tracked_pub_->publish(polygon_msg);
     }
 
     void draw_line_point(cv::Mat &img, const object_detect_result &det_result)
@@ -357,6 +361,11 @@ private:
 
     void draw_tracking_results(cv::Mat &img, const std::vector<STrack> &tracks, object_detect_result_list &results)
     {
+
+        geometry_msgs::msg::PolygonStamped polygon_msg;
+        polygon_msg.header.stamp = this->get_clock()->now();
+        polygon_msg.header.frame_id = "camera_link";
+
         std::cout << "Tracking result (output_stracks):" << std::endl;
         if (tracks.empty())
         {
@@ -369,7 +378,8 @@ private:
             {
                 // 获取对应检测结果
                 auto det_result = find_detection_by_bbox(track.tlbr, results);
-                if (!det_result) {
+                if (!det_result)
+                {
                     RCLCPP_DEBUG(this->get_logger(), "No valid detection for track %d", track.track_id);
                     continue; // 跳过无效检测
                 }
@@ -397,6 +407,16 @@ private:
                     depth = compute_body_depth(*det_result); // 获取关键关键节点的平均深度（距离）
                 }
 
+
+                // 将像素坐标转换为相机坐标系下的三维坐标
+                geometry_msgs::msg::Point32 point;
+                point.x = center_x; // X in camera frame
+                point.y =center_y; // Y in camera frame
+                point.z = depth;                        // Z (depth) in camera frame
+
+                // 添加点到消息
+                polygon_msg.polygon.points.push_back(point);
+
                 std::cout << "(X,Y,Z):(" << center_x << "," << center_y << "," << depth << ")" << std::endl;
                 // 打印目标信息
                 // RCLCPP_INFO(this->get_logger(), "Detected object center [%f, %f], Depth: %.2f meters",
@@ -415,23 +435,26 @@ private:
                 cv::putText(img, std::to_string(depth), cv::Point((x1 + x2) / 2, (y1 + y2) / 2 - 5), cv::FONT_HERSHEY_SIMPLEX, 1.5, cv::Scalar(0, 255, 0), 2);
             }
         }
+        tracked_pub_->publish(polygon_msg);
+
     }
 
-    // 新增数据结构：跟踪目标状态
+    // 变量声明
+
+    // 数据结构：跟踪目标状态
     struct TrackedPerson
     {
         int track_id;
-        bool is_tracking;                       // 是否正在跟踪
-        cv::Mat feature;                        // 保存的特征
-        std::deque<bool> hands_up_history;      // 举手状态历史
-        rclcpp::Time hands_up_start_time;       // 举手开始时间
-        rclcpp::Time hands_up_stop_time;         // 举手结束时间
+        bool is_tracking;                  // 是否正在跟踪
+        cv::Mat feature;                   // 保存的特征
+        std::deque<bool> hands_up_history; // 举手状态历史
+        rclcpp::Time hands_up_start_time;  // 举手开始时间
+        rclcpp::Time hands_up_stop_time;   // 举手结束时间
     };
 
     std::map<int, TrackedPerson> tracked_persons_; // 所有检测到的人
     int active_track_id_ = -1;                     // 当前激活的跟踪ID
 
-    // rknn_app_context_t rknn_app_ctx;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub_;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr depth_image_sub_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr image_pub_;
@@ -441,51 +464,17 @@ private:
 
     int skeleton[38] = {0};
 
-    // 添加动作检测成员函数声明
-    bool isHandsOnHips(object_detect_result &det_result);
+    // 动作检测成员函数声明
     bool isHandsUp(object_detect_result &det_result);
     float compute_body_depth(object_detect_result &det_result);
 
     std::deque<bool> hands_up_history_;
-    std::deque<bool> hands_on_hips_history_;
+    // std::deque<bool> hands_on_hips_history_;
 
     std::unique_ptr<BYTETracker> tracker_;
     std::vector<Object> track_objs;
     rclcpp::Publisher<geometry_msgs::msg::PolygonStamped>::SharedPtr tracked_pub_;
 };
-
-// 叉腰动作检测实现
-bool YoloPoseNode::isHandsOnHips(object_detect_result &det_result)
-{
-    // 关键点索引定义（根据COCO规范）
-    const int LEFT_WRIST = 9;
-    const int RIGHT_WRIST = 10;
-    const int LEFT_HIP = 11;
-    const int RIGHT_HIP = 12;
-
-    // 获取坐标（假设关键点格式为[x, y, confidence]）
-    cv::Point left_wrist(det_result.keypoints[LEFT_WRIST][0], det_result.keypoints[LEFT_WRIST][1]);
-    cv::Point right_wrist(det_result.keypoints[RIGHT_WRIST][0], det_result.keypoints[RIGHT_WRIST][1]);
-    cv::Point left_hip(det_result.keypoints[LEFT_HIP][0], det_result.keypoints[LEFT_HIP][1]);
-    cv::Point right_hip(det_result.keypoints[RIGHT_HIP][0], det_result.keypoints[RIGHT_HIP][1]);
-
-    // 置信度过滤
-    if (det_result.keypoints[LEFT_WRIST][2] < 0.3 ||
-        det_result.keypoints[RIGHT_WRIST][2] < 0.3)
-    {
-        return false;
-    }
-
-    // 判断逻辑
-    bool left_hand_on_hip =
-        (abs(left_wrist.y - left_hip.y) < 25 &&
-         (left_wrist.x > left_hip.x));
-    bool right_hand_on_hip =
-        (abs(right_wrist.y - right_hip.y) < 25 &&
-         (right_wrist.x < right_hip.x));
-
-    return left_hand_on_hip && right_hand_on_hip;
-}
 
 // 举双手动作检测实现
 bool YoloPoseNode::isHandsUp(object_detect_result &det_result)
@@ -512,6 +501,7 @@ bool YoloPoseNode::isHandsUp(object_detect_result &det_result)
     return left_hand_up || right_hand_up;
 }
 
+// 计算有效关键点的平均距离
 float YoloPoseNode::compute_body_depth(object_detect_result &det_result)
 {
     std::lock_guard<std::mutex> lock(depth_mutex_);
