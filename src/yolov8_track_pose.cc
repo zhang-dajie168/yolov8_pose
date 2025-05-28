@@ -147,7 +147,8 @@ private:
                 // 初始化或更新跟踪对象
                 if (tracked_persons_.find(track_id) == tracked_persons_.end())
                 {
-                    tracked_persons_[track_id] = {track_id, false, cv::Mat(), {}, this->now(), rclcpp::Time()};
+                    // tracked_persons_[track_id] = {track_id, false, cv::Mat(), {}, this->now(), rclcpp::Time()};
+                    tracked_persons_[track_id] = {track_id, false, {}, this->now(), rclcpp::Time()};
                 }
                 auto &person = tracked_persons_[track_id];
 
@@ -172,10 +173,10 @@ private:
                     {
                         person.is_tracking = true;
                         person.hands_up_start_time = this->now();
-                        // 保存特征
-                        cv::Rect roi(track.tlbr[0], track.tlbr[1],
-                                     track.tlbr[2] - track.tlbr[0], track.tlbr[3] - track.tlbr[1]);
-                        person.feature = extract_feature(frame(roi));
+                        // // 保存特征
+                        // cv::Rect roi(track.tlbr[0], track.tlbr[1],
+                        //              track.tlbr[2] - track.tlbr[0], track.tlbr[3] - track.tlbr[1]);
+                        // person.feature = extract_feature(frame(roi));
                     }
                 }
                 else
@@ -286,13 +287,13 @@ private:
         return (union_area == 0) ? 0.0f : (inter_area / union_area);
     }
 
-    // 特征提取函数（示例）
-    cv::Mat extract_feature(const cv::Mat &roi)
-    {
-        cv::Mat feature;
-        cv::resize(roi, feature, cv::Size(64, 128)); // 简单resize作为特征
-        return feature;
-    }
+    // // 特征提取函数（示例）
+    // cv::Mat extract_feature(const cv::Mat &roi)
+    // {
+    //     cv::Mat feature;
+    //     cv::resize(roi, feature, cv::Size(64, 128)); // 简单resize作为特征
+    //     return feature;
+    // }
 
     // 深度图像回调
     void depth_image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg)
@@ -446,7 +447,7 @@ private:
     {
         int track_id;
         bool is_tracking;                  // 是否正在跟踪
-        cv::Mat feature;                   // 保存的特征
+        //cv::Mat feature;                   // 保存的特征
         std::deque<bool> hands_up_history; // 举手状态历史
         rclcpp::Time hands_up_start_time;  // 举手开始时间
         rclcpp::Time hands_up_stop_time;   // 举手结束时间
