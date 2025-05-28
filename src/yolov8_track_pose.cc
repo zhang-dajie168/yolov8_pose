@@ -90,7 +90,8 @@ private:
     {
         try
         {
-
+            // 开始计时
+            auto start_1 = std::chrono::high_resolution_clock::now();
             // 转换ROS图像到OpenCV格式
             cv::Mat frame = cv_bridge::toCvCopy(msg, "bgr8")->image;
 
@@ -207,9 +208,14 @@ private:
             draw_tracking_results(frame, filtered_tracks, od_results);
 
             // 转换回ROS Image并发布
-
             sensor_msgs::msg::Image::SharedPtr output_msg = cv_bridge::CvImage(msg->header, "bgr8", frame).toImageMsg();
             image_pub_->publish(*output_msg);
+
+            // 结束计时
+            auto end = std::chrono::high_resolution_clock::now();
+            auto all_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start_1).count() / 1000.0;
+            std::cout<<"all_time:"<<all_time<<"ms"<<std::endl;
+                
 
             if (src_image.virt_addr != NULL)
             {
